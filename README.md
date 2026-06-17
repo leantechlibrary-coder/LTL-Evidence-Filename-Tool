@@ -18,7 +18,7 @@ mints（民事裁判書類電子提出システム）への証拠提出用に、
 
 Microsoft Store から入手してください。
 
-URL：
+URL：https://apps.microsoft.com/detail/9nr0xcfp1bj1?hl=ja-JP&gl=JP
 
 ## ライセンス
 
