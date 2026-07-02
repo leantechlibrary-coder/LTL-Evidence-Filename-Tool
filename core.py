@@ -24,8 +24,9 @@ import re
 from dataclasses import dataclass
 
 # mints禁止文字（公式手引には未記載だが、Windowsファイル名として必須のサニタイズ）
+# 制御文字（\x00-\x1f, \x7f）もWindowsファイル名に使えないため合わせて除去する。
 FORBIDDEN = r'\/:*?"<>|'
-FORBIDDEN_RE = re.compile("[" + re.escape(FORBIDDEN) + "]")
+FORBIDDEN_RE = re.compile("[" + re.escape(FORBIDDEN) + r"\x00-\x1f\x7f]")
 
 # 全角英数字 → 半角（英数字のみ。かな・漢字・約物は保持）
 _FW_ALNUM: dict[int, int] = {}
@@ -414,6 +415,10 @@ def execute(plans: list[Plan], src_folder: str) -> tuple[list[tuple[Plan, bool, 
             continue
         assert p.new_name
         dest = os.path.join(out_dir, p.new_name)
+        # 最終ガード：出力は必ず out_dir 直下（new_name にパス区切りが混入しても外へ書かない）
+        if os.path.dirname(os.path.abspath(dest)) != os.path.abspath(out_dir):
+            results.append((p, False, f"失敗: 出力名がフォルダ外を指すため拒否: {p.new_name}"))
+            continue
         try:
             if p.will_merge:
                 assert p.source_paths

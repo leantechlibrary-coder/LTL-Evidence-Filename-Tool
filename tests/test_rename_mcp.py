@@ -43,6 +43,29 @@ def _make_docx(path, rows):
         z.writestr("word/document.xml", doc)
 
 
+# ---- ファイル名生成の安全性（サニタイズ＋出力先の封じ込め）----
+
+def test_sanitize_hyoumoku_strips_separators_and_controls():
+    # パス区切り・Windows禁止文字・制御文字は標目から除去される
+    s = core.sanitize_hyoumoku('契約\\..\\書:*?"<>|/x')
+    assert "\\" not in s and "/" not in s and ":" not in s
+    assert core.sanitize_hyoumoku("契約\x00書\n\t") == "契約書"
+    # 生成名は必ず号証プレフィックスで始まり、区切りを含まない
+    name = core.build_filename(core.Kosho("甲", 1), '..\\..\\evil/名')
+    assert name.startswith("甲001") and "/" not in name and "\\" not in name
+
+
+def test_execute_containment_guard_blocks_escape(tmp_path):
+    # 万一 new_name にパス区切りが混入しても、出力フォルダ外には書かない（最終ガード）
+    src = tmp_path / "src"
+    src.mkdir()
+    p = core.Plan(core.STATUS_RENAME, core.Kosho("甲", 1), "x",
+                  str(src / "dummy.pdf"), "dummy.pdf", "../escape.pdf")
+    results, out_dir = core.execute([p], str(src))
+    assert results[0][1] is False and "拒否" in results[0][2]
+    assert not (tmp_path / "escape.pdf").exists()
+
+
 # ---- 貼り付けパーサ: LLMがタブを改行に化けさせた入力の復元 ----
 
 def test_parse_pasted_recovers_newline_mangled_pairs():
