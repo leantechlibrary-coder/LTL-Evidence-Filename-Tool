@@ -102,11 +102,39 @@ def records_from(grid: Grid, kosho_col: int, hyoumoku_col: int | None) -> list[t
     return recs
 
 
+def _pair_alternating(lines: list[str]) -> list[tuple[str, str]] | None:
+    """改行区切りに化けた [号証, 標目, 号証, 標目, ...] を号証/標目ペアへ復元する。
+
+    小型LLM（例: gemma）が pasted_text を組み立てる際、号証と標目の間のタブを
+    改行に化けさせ、各値が1行ずつ交互に並ぶことがある。この一次元の並びを救済する。
+
+    発火条件（いずれか欠けたら None を返し通常経路へフォールバック）:
+      - どの行も内部区切り（タブ／連続空白／単一空白）を持たない＝単一トークン
+        （＝正規のタブ貼り付け・スペース区切り手入力はここで弾かれ影響を受けない）
+      - 行数が偶数、かつ「号証／非号証」が先頭号証から厳密に交互
+    """
+    for ln in lines:
+        if len(_split_fields(ln)) >= 2:
+            return None                      # 内部区切りあり＝化けていない → 通常経路へ
+    if len(lines) < 2 or len(lines) % 2 != 0:
+        return None
+    recs: list[tuple[str, str]] = []
+    for i in range(0, len(lines), 2):
+        kosho, hy = lines[i], lines[i + 1]
+        if not core.is_kosho_cell(kosho) or core.is_kosho_cell(hy):
+            return None                      # 交互（号証→非号証）になっていない
+        recs.append((kosho, hy))
+    return recs
+
+
 def parse_pasted(text: str) -> list[tuple[str, str]]:
     """貼り付けテキストを (号証セル, 標目) のリストに解釈する。
 
     各行を (号証セル, 標目) の2列グリッドへ正規化し、records_from に通す。
     これにより結合セル継承・見出し除外を既存ロジックと共有する。
+
+    号証は取れたが標目が全て空になった場合、タブが改行に化けた（LLM経由の）
+    可能性があるため、交互ペア復元（_pair_alternating）を試みる。
     """
     grid: Grid = []
     for line in text.splitlines():
@@ -114,4 +142,12 @@ def parse_pasted(text: str) -> list[tuple[str, str]]:
             continue
         kosho, hy = _interpret(_split_fields(line))
         grid.append([kosho, hy])
-    return records_from(grid, 0, 1)
+    recs = records_from(grid, 0, 1)
+
+    # 号証は読めたのに標目が全滅 → タブ→改行化けを疑い、交互ペア復元を試す
+    if recs and all(not hy for _, hy in recs):
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        recovered = _pair_alternating(lines)
+        if recovered:
+            return recovered
+    return recs

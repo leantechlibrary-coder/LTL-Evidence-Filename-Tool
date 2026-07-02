@@ -50,6 +50,9 @@ _KOSHO_RE = re.compile(
 )
 # 範囲枝番（甲001-1~20 等）は未対応。検出したら拾わない。
 _RANGE_MARK = ("~", "〜", "～")
+# 範囲表記の判定: 先頭号証トークンの直後（空白のみ挟んで）に範囲マークが続くか。
+# 標目内のチルダ（甲005 …令和5年～6年…）は別テキストを挟むのでここに該当しない。
+_RANGE_AFTER_TOKEN = re.compile(r"^\s*[" + re.escape("".join(_RANGE_MARK)) + r"]")
 
 
 @dataclass(frozen=True)
@@ -74,15 +77,19 @@ def parse_kosho(text: str) -> Kosho | None:
     """ファイル名やテンプレの番号セルから号証キーを抽出。取れなければ None。
 
     全角→半角、枝番区切りゆらぎ（の/-/ー/‐/−/－）を吸収。
-    範囲枝番（甲001-1~20）は未対応として None を返す。
+    範囲枝番（甲001-1~20）は未対応として None を返す（parse_range が担当）。
+    範囲判定は「先頭号証トークンの直後の範囲マーク」に限定する。標目内のチルダ
+    （甲005 取引明細（令和5年～6年））は号証トークンの後ろに別テキストを挟むので
+    弾かれず、先頭の号証（甲005）として正しく読める。
     """
     if not text:
         return None
     norm = normalize_alnum(str(text))
-    if any(m in norm for m in _RANGE_MARK):
-        return None
     m = _KOSHO_RE.match(norm)
     if not m:
+        return None
+    # 先頭号証トークンの直後に範囲マークが続く＝範囲表記 → parse_range に委ねる
+    if _RANGE_AFTER_TOKEN.match(norm[m.end():]):
         return None
     branch = int(m.group(4)) if m.group(4) else None
     return Kosho(

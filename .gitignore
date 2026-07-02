@@ -1,0 +1,19 @@
+# Byte-compiled
+__pycache__/
+*.py[cod]
+
+# Environments
+.venv/
+venv/
+env/
+
+# PyInstaller / MSIX build outputs
+build/
+dist/
+*.spec
+packaging/stage/
+packaging/out/
+packaging/*.pfx
+
+# Test caches
+.pytest_cache/
